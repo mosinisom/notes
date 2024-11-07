@@ -77,7 +77,11 @@ public class WebSocketController : ControllerBase
       Title = json.GetProperty("title").GetString(),
       Text = json.GetProperty("text").GetString(),
       Date = DateTime.Now,
-      IsDeleted = false
+      IsDeleted = false,
+      UserId = int.Parse(json.GetProperty("user_id").GetString()),
+      IsFolder = json.GetProperty("is_folder").GetBoolean(),
+      ParentId = json.TryGetProperty("parent_id", out JsonElement parentId) ?
+            parentId.GetInt32() : null
     };
 
     _context.Notes.Add(note);
@@ -89,7 +93,9 @@ public class WebSocketController : ControllerBase
   private string EditNote(JsonElement json)
   {
     var id = json.GetProperty("id").GetInt32();
-    var note = _context.Notes.Find(id);
+    var userId = int.Parse(json.GetProperty("user_id").GetString());
+
+    var note = _context.Notes.FirstOrDefault(n => n.Id == id && n.UserId == userId);
 
     if (note == null)
     {
@@ -98,6 +104,12 @@ public class WebSocketController : ControllerBase
 
     note.Title = json.GetProperty("title").GetString();
     note.Text = json.GetProperty("text").GetString();
+
+    if (json.TryGetProperty("parent_id", out JsonElement parentId))
+    {
+      note.ParentId = parentId.GetInt32();
+    }
+
     _context.SaveChanges();
 
     return JsonSerializer.Serialize(new { status = "success" });
@@ -106,17 +118,76 @@ public class WebSocketController : ControllerBase
   private string DeleteNote(JsonElement json)
   {
     var id = json.GetProperty("id").GetInt32();
-    var note = _context.Notes.Find(id);
+    var userId = int.Parse(json.GetProperty("user_id").GetString());
+
+    var note = _context.Notes.FirstOrDefault(n => n.Id == id && n.UserId == userId);
 
     if (note == null)
     {
       return JsonSerializer.Serialize(new { status = "error", message = "Note not found" });
     }
 
-    note.IsDeleted = true;
+    // Рекурсивно помечаем как удаленные все дочерние заметки
+    MarkNoteAsDeleted(note);
     _context.SaveChanges();
 
     return JsonSerializer.Serialize(new { status = "success" });
+  }
+
+  private void MarkNoteAsDeleted(Note note)
+  {
+    note.IsDeleted = true;
+    var children = _context.Notes.Where(n => n.ParentId == note.Id);
+    foreach (var child in children)
+    {
+      MarkNoteAsDeleted(child);
+    }
+  }
+
+  // Добавляем новый метод для получения структуры папок
+  private string GetNoteStructure(JsonElement json)
+  {
+    var userId = int.Parse(json.GetProperty("user_id").GetString());
+    var notes = _context.Notes
+        .Where(n => n.UserId == userId && !n.IsDeleted)
+        .OrderBy(n => n.IsFolder)
+        .ThenBy(n => n.Title)
+        .ToList();
+
+    var structure = BuildNoteTree(notes, null);
+    return JsonSerializer.Serialize(new { status = "success", structure });
+  }
+
+  private List<object> BuildNoteTree(List<Note> allNotes, int? parentId)
+  {
+    var items = new List<object>();
+    var children = allNotes.Where(n => n.ParentId == parentId).ToList();
+
+    foreach (var child in children)
+    {
+      if (child.IsFolder)
+      {
+        items.Add(new
+        {
+          id = child.Id,
+          title = child.Title,
+          is_folder = true,
+          children = BuildNoteTree(allNotes, child.Id)
+        });
+      }
+      else
+      {
+        items.Add(new
+        {
+          id = child.Id,
+          title = child.Title,
+          is_folder = false,
+          text = child.Text
+        });
+      }
+    }
+
+    return items;
   }
 
   private string RegisterUser(JsonElement json)

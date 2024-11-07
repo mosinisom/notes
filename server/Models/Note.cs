@@ -5,4 +5,12 @@ public class Note
   public string Text { get; set; }
   public DateTime Date { get; set; }
   public bool IsDeleted { get; set; }
+  public int UserId { get; set; } // Внешний ключ для User
+  public User User { get; set; } // Навигационное свойство
+
+  // Поля для паттерна Composite
+  public bool IsFolder { get; set; }
+  public int? ParentId { get; set; }
+  public Note Parent { get; set; }
+  public List<Note> Children { get; set; }
 }
