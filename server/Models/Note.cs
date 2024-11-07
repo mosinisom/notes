@@ -7,6 +7,7 @@ public class Note
   public bool IsDeleted { get; set; }
   public int UserId { get; set; } // Внешний ключ для User
   public User User { get; set; } // Навигационное свойство
+  public string ShareToken { get; set; }
 
   // Поля для паттерна Composite
   public bool IsFolder { get; set; }

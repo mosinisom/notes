@@ -10,10 +10,12 @@ using System.Threading.Tasks;
 public class WebSocketController : ControllerBase
 {
   private readonly ApplicationDbContext _context;
+  private readonly QRCodeGeneratorService _qrGenerator;
 
-  public WebSocketController(ApplicationDbContext context)
+  public WebSocketController(ApplicationDbContext context, QRCodeGeneratorService qrGenerator)
   {
     _context = context;
+    _qrGenerator = qrGenerator;
   }
 
   [HttpGet]
@@ -65,9 +67,70 @@ public class WebSocketController : ControllerBase
         return RegisterUser(json.RootElement);
       case "login":
         return LoginUser(json.RootElement);
+      case "share_note":
+        return ShareNote(json.RootElement);
+      case "get_shared_note":
+        return GetSharedNote(json.RootElement);
       default:
         return "Unknown action";
     }
+  }
+
+  private string GenerateShareToken()
+  {
+    return Convert.ToBase64String(Guid.NewGuid().ToByteArray()).Replace("/", "_").Replace("+", "-");
+  }
+
+  private string ShareNote(JsonElement json)
+  {
+    var noteId = json.GetProperty("id").GetInt32();
+    var userId = int.Parse(json.GetProperty("user_id").GetString());
+
+    var note = _context.Notes.FirstOrDefault(n => n.Id == noteId && n.UserId == userId);
+
+    if (note == null)
+    {
+      return JsonSerializer.Serialize(new { status = "error", message = "Note not found" });
+    }
+
+    if (string.IsNullOrEmpty(note.ShareToken))
+    {
+      note.ShareToken = GenerateShareToken();
+      _context.SaveChanges();
+    }
+
+    var shareUrl = $"{Request.Scheme}://{Request.Host}/shared/{note.ShareToken}";
+    var qrCode = _qrGenerator.GenerateQRCode(shareUrl);
+
+    return JsonSerializer.Serialize(new
+    {
+      status = "success",
+      shareUrl = shareUrl,
+      qrCode = qrCode
+    });
+  }
+
+  private string GetSharedNote(JsonElement json)
+  {
+    var token = json.GetProperty("token").GetString();
+
+    var note = _context.Notes.FirstOrDefault(n => n.ShareToken == token && !n.IsDeleted);
+
+    if (note == null)
+    {
+      return JsonSerializer.Serialize(new { status = "error", message = "Note not found" });
+    }
+
+    return JsonSerializer.Serialize(new
+    {
+      status = "success",
+      note = new
+      {
+        title = note.Title,
+        text = note.Text,
+        date = note.Date
+      }
+    });
   }
 
   private string CreateNote(JsonElement json)
@@ -127,7 +190,6 @@ public class WebSocketController : ControllerBase
       return JsonSerializer.Serialize(new { status = "error", message = "Note not found" });
     }
 
-    // Рекурсивно помечаем как удаленные все дочерние заметки
     MarkNoteAsDeleted(note);
     _context.SaveChanges();
 
@@ -144,7 +206,6 @@ public class WebSocketController : ControllerBase
     }
   }
 
-  // Добавляем новый метод для получения структуры папок
   private string GetNoteStructure(JsonElement json)
   {
     var userId = int.Parse(json.GetProperty("user_id").GetString());
