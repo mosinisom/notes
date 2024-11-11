@@ -55,25 +55,39 @@ public class WebSocketController : ControllerBase
     var json = JsonDocument.Parse(message);
     var action = json.RootElement.GetProperty("action").GetString();
 
+    string response;
     switch (action)
     {
       case "create_note":
-        return CreateNote(json.RootElement);
+        response = CreateNote(json.RootElement);
+        break;
       case "edit_note":
-        return EditNote(json.RootElement);
+        response = EditNote(json.RootElement);
+        break;
       case "delete_note":
-        return DeleteNote(json.RootElement);
+        response = DeleteNote(json.RootElement);
+        break;
       case "register":
-        return RegisterUser(json.RootElement);
+        response = RegisterUser(json.RootElement);
+        break;
       case "login":
-        return LoginUser(json.RootElement);
+        response = LoginUser(json.RootElement);
+        break;
       case "share_note":
-        return ShareNote(json.RootElement);
+        response = ShareNote(json.RootElement);
+        break;
       case "get_shared_note":
-        return GetSharedNote(json.RootElement);
+        response = GetSharedNote(json.RootElement);
+        break;
+      case "test":
+        response = JsonSerializer.Serialize(new { status = "success", message = "Hello Client!" });
+        break;
       default:
-        return "Unknown action";
+        response = JsonSerializer.Serialize(new { status = "error", message = "Unknown action" });
+        break;
     }
+
+    return JsonSerializer.Serialize(new { action, response });
   }
 
   private string GenerateShareToken()
@@ -90,7 +104,7 @@ public class WebSocketController : ControllerBase
 
     if (note == null)
     {
-      return JsonSerializer.Serialize(new { status = "error", message = "Note not found" });
+      return JsonSerializer.Serialize(new { action = "share_note", status = "error", message = "Note not found" });
     }
 
     if (string.IsNullOrEmpty(note.ShareToken))
@@ -102,12 +116,7 @@ public class WebSocketController : ControllerBase
     var shareUrl = $"{Request.Scheme}://{Request.Host}/shared/{note.ShareToken}";
     var qrCode = _qrGenerator.GenerateQRCode(shareUrl);
 
-    return JsonSerializer.Serialize(new
-    {
-      status = "success",
-      shareUrl = shareUrl,
-      qrCode = qrCode
-    });
+    return JsonSerializer.Serialize(new { action = "share_note", status = "success", shareUrl, qrCode });
   }
 
   private string GetSharedNote(JsonElement json)
@@ -118,18 +127,19 @@ public class WebSocketController : ControllerBase
 
     if (note == null)
     {
-      return JsonSerializer.Serialize(new { status = "error", message = "Note not found" });
+      return JsonSerializer.Serialize(new { action = "get_shared_note", status = "error", message = "Note not found" });
     }
 
     return JsonSerializer.Serialize(new
     {
-      status = "success",
-      note = new
-      {
-        title = note.Title,
-        text = note.Text,
-        date = note.Date
-      }
+        action = "get_shared_note",
+        status = "success",
+        note = new
+        {
+            title = note.Title,
+            text = note.Text,
+            date = note.Date
+        }
     });
   }
 
@@ -137,20 +147,19 @@ public class WebSocketController : ControllerBase
   {
     var note = new Note
     {
-      Title = json.GetProperty("title").GetString(),
-      Text = json.GetProperty("text").GetString(),
-      Date = DateTime.Now,
-      IsDeleted = false,
-      UserId = int.Parse(json.GetProperty("user_id").GetString()),
-      IsFolder = json.GetProperty("is_folder").GetBoolean(),
-      ParentId = json.TryGetProperty("parent_id", out JsonElement parentId) ?
-            parentId.GetInt32() : null
+        Title = json.GetProperty("title").GetString(),
+        Text = json.GetProperty("text").GetString(),
+        Date = DateTime.Now,
+        IsDeleted = false,
+        UserId = int.Parse(json.GetProperty("user_id").GetString()),
+        IsFolder = json.GetProperty("is_folder").GetBoolean(),
+        ParentId = json.TryGetProperty("parent_id", out JsonElement parentId) ? parentId.GetInt32() : (int?)null
     };
 
     _context.Notes.Add(note);
     _context.SaveChanges();
 
-    return JsonSerializer.Serialize(new { status = "success", note.Id });
+    return JsonSerializer.Serialize(new { action = "create_note", status = "success", note.Id });
   }
 
   private string EditNote(JsonElement json)
@@ -162,7 +171,7 @@ public class WebSocketController : ControllerBase
 
     if (note == null)
     {
-      return JsonSerializer.Serialize(new { status = "error", message = "Note not found" });
+        return JsonSerializer.Serialize(new { action = "edit_note", status = "error", message = "Note not found" });
     }
 
     note.Title = json.GetProperty("title").GetString();
@@ -170,12 +179,12 @@ public class WebSocketController : ControllerBase
 
     if (json.TryGetProperty("parent_id", out JsonElement parentId))
     {
-      note.ParentId = parentId.GetInt32();
+        note.ParentId = parentId.GetInt32();
     }
 
     _context.SaveChanges();
 
-    return JsonSerializer.Serialize(new { status = "success" });
+    return JsonSerializer.Serialize(new { action = "edit_note", status = "success" });
   }
 
   private string DeleteNote(JsonElement json)
@@ -187,13 +196,13 @@ public class WebSocketController : ControllerBase
 
     if (note == null)
     {
-      return JsonSerializer.Serialize(new { status = "error", message = "Note not found" });
+        return JsonSerializer.Serialize(new { action = "delete_note", status = "error", message = "Note not found" });
     }
 
     MarkNoteAsDeleted(note);
     _context.SaveChanges();
 
-    return JsonSerializer.Serialize(new { status = "success" });
+    return JsonSerializer.Serialize(new { action = "delete_note", status = "success" });
   }
 
   private void MarkNoteAsDeleted(Note note)
@@ -258,20 +267,20 @@ public class WebSocketController : ControllerBase
 
     if (_context.Users.Any(u => u.Username == username))
     {
-      return JsonSerializer.Serialize(new { status = "error", message = "User already exists" });
+        return JsonSerializer.Serialize(new { action = "register", status = "error", message = "User already exists" });
     }
 
     var user = new User
     {
-      Username = username,
-      PasswordHash = passwordHash,
-      AuthToken = Guid.NewGuid().ToString()
+        Username = username,
+        PasswordHash = passwordHash,
+        AuthToken = Guid.NewGuid().ToString()
     };
 
     _context.Users.Add(user);
     _context.SaveChanges();
 
-    return JsonSerializer.Serialize(new { status = "success", auth_token = user.AuthToken });
+    return JsonSerializer.Serialize(new { action = "register", status = "success", auth_token = user.AuthToken });
   }
 
   private string LoginUser(JsonElement json)
@@ -283,9 +292,9 @@ public class WebSocketController : ControllerBase
 
     if (user == null)
     {
-      return JsonSerializer.Serialize(new { status = "error", message = "Invalid credentials" });
+        return JsonSerializer.Serialize(new { action = "login", status = "error", message = "Invalid credentials" });
     }
 
-    return JsonSerializer.Serialize(new { status = "success", auth_token = user.AuthToken });
+    return JsonSerializer.Serialize(new { action = "login", status = "success", auth_token = user.AuthToken });
   }
 }

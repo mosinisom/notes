@@ -11,6 +11,8 @@ var app = builder.Build();
 
 app.UseWebSockets();
 
+app.UseStaticFiles();
+
 app.MapGet("/", () => "Hello World!");
 
 app.MapControllers();
