@@ -1,0 +1,63 @@
+body {
+  font-family: Arial, sans-serif;
+  background-color: #e8f5e9;
+  color: #1b5e20;
+}
+
+h2 {
+  color: #2e7d32;
+}
+
+#auth-container,
+#notes-container {
+  width: 300px;
+  margin: 50px auto;
+  text-align: center;
+}
+
+input[type="text"],
+input[type="password"] {
+  width: 90%;
+  padding: 10px;
+  margin: 5px 0;
+  border: 1px solid #a5d6a7;
+  border-radius: 5px;
+}
+
+button {
+  width: 95%;
+  padding: 10px;
+  margin: 5px 0;
+  background-color: #4caf50;
+  border: none;
+  border-radius: 5px;
+  color: white;
+  cursor: pointer;
+}
+
+button:hover {
+  background-color: #388e3c;
+}
+
+#notes-tree {
+  text-align: left;
+  margin-top: 20px;
+}
+
+.folder-item,
+.note-item {
+  padding: 5px 10px;
+  margin: 5px 0;
+  border: 1px solid #a5d6a7;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.folder-item:hover,
+.note-item:hover {
+  background-color: #c8e6c9;
+}
+
+.child-container {
+  margin-left: 20px;
+}

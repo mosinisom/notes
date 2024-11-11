@@ -80,14 +80,14 @@ public class WebSocketController : ControllerBase
         response = GetSharedNote(json.RootElement);
         break;
       case "test":
-        response = JsonSerializer.Serialize(new { status = "success", message = "Hello Client!" });
+        response = JsonSerializer.Serialize(new { action = "test", status = "success", message = "Hello Client!" });
         break;
       default:
-        response = JsonSerializer.Serialize(new { status = "error", message = "Unknown action" });
+        response = JsonSerializer.Serialize(new { action = "undefined", status = "error", message = "Unknown action" });
         break;
     }
 
-    return JsonSerializer.Serialize(new { action, response });
+    return response;
   }
 
   private string GenerateShareToken()
