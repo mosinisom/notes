@@ -13,7 +13,16 @@ app.UseWebSockets();
 
 app.UseStaticFiles();
 
+app.MapGet("/shared/{token}", async context =>
+{
+  var path = Path.Combine(app.Environment.WebRootPath, "shared.html");
+  context.Response.ContentType = "text/html";
+  await context.Response.SendFileAsync(path);
+});
+
 app.MapGet("/", () => "Hello World!");
+
+
 
 app.MapControllers();
 

@@ -5,8 +5,8 @@ public class Note
   public string Text { get; set; }
   public DateTime Date { get; set; }
   public bool IsDeleted { get; set; }
-  public int UserId { get; set; } // Внешний ключ для User
-  public User User { get; set; } // Навигационное свойство
+  public int UserId { get; set; } 
+  public User User { get; set; } 
   public string ShareToken { get; set; }
 
   // Поля для паттерна Composite
