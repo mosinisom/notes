@@ -13,7 +13,6 @@ public class NotesService
     _usersService = usersService;
   }
 
-
   public string CreateNote(JsonElement json)
   {
     var user = _usersService.GetUserByAuthToken(json.GetProperty("auth_token").GetString());

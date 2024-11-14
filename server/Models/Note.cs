@@ -9,7 +9,6 @@ public class Note
   public User User { get; set; } 
   public string ShareToken { get; set; }
 
-  // Поля для паттерна Composite
   public bool IsFolder { get; set; }
   public int? ParentId { get; set; }
   public Note Parent { get; set; }
