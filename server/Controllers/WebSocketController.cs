@@ -2,20 +2,18 @@ using Microsoft.AspNetCore.Mvc;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 
 [ApiController]
 [Route("ws")]
 public class WebSocketController : ControllerBase
 {
-  private readonly ApplicationDbContext _context;
-  private readonly QRCodeGeneratorService _qrGenerator;
+  private readonly NotesService _notesService;
+  private readonly UsersService _usersService;
 
-  public WebSocketController(ApplicationDbContext context, QRCodeGeneratorService qrGenerator)
+  public WebSocketController(NotesService notesService, UsersService usersService)
   {
-    _context = context;
-    _qrGenerator = qrGenerator;
+    _notesService = notesService;
+    _usersService = usersService;
   }
 
   [HttpGet]
@@ -23,12 +21,12 @@ public class WebSocketController : ControllerBase
   {
     if (HttpContext.WebSockets.IsWebSocketRequest)
     {
-      var webSocket = await HttpContext.WebSockets.AcceptWebSocketAsync();
+      using var webSocket = await HttpContext.WebSockets.AcceptWebSocketAsync();
       await HandleWebSocket(webSocket);
     }
     else
     {
-      HttpContext.Response.StatusCode = 400;
+      HttpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
     }
   }
 
@@ -55,283 +53,17 @@ public class WebSocketController : ControllerBase
     var json = JsonDocument.Parse(message);
     var action = json.RootElement.GetProperty("action").GetString();
 
-    string response;
-    switch (action)
+    return action switch
     {
-      case "create_note":
-        response = CreateNote(json.RootElement);
-        break;
-      case "edit_note":
-        response = EditNote(json.RootElement);
-        break;
-      case "delete_note":
-        response = DeleteNote(json.RootElement);
-        break;
-      case "register":
-        response = RegisterUser(json.RootElement);
-        break;
-      case "login":
-        response = LoginUser(json.RootElement);
-        break;
-      case "share_note":
-        response = ShareNote(json.RootElement);
-        break;
-      case "get_shared_note":
-        response = GetSharedNote(json.RootElement);
-        break;
-      case "get_note_structure":
-        response = GetNoteStructure(json.RootElement);
-        break;
-      case "test":
-        response = JsonSerializer.Serialize(new { action = "test", status = "success", message = "Hello Client!" });
-        break;
-      default:
-        response = JsonSerializer.Serialize(new { action = "undefined", status = "error", message = "Unknown action" });
-        break;
-    }
-
-    return response;
-  }
-
-  private User GetUserByAuthToken(JsonElement json)
-  {
-    var authToken = json.GetProperty("auth_token").GetString();
-    return _context.Users.FirstOrDefault(u => u.AuthToken == authToken);
-  }
-
-  private string GenerateShareToken()
-  {
-    return Convert.ToBase64String(Guid.NewGuid().ToByteArray()).Replace("/", "_").Replace("+", "-");
-  }
-
-  private string ShareNote(JsonElement json)
-  {
-    var user = GetUserByAuthToken(json);
-    if (user == null)
-    {
-      return JsonSerializer.Serialize(new { action = "share_note", status = "error", message = "Invalid auth token" });
-    }
-
-    var noteId = json.GetProperty("id").GetInt32();
-    var note = _context.Notes.FirstOrDefault(n => n.Id == noteId && n.UserId == user.Id);
-
-    if (note == null)
-    {
-      return JsonSerializer.Serialize(new { action = "share_note", status = "error", message = "Note not found" });
-    }
-
-    if (string.IsNullOrEmpty(note.ShareToken))
-    {
-      note.ShareToken = GenerateShareToken();
-      _context.SaveChanges();
-    }
-
-    var shareUrl = $"{Request.Scheme}://{Request.Host}/shared/{note.ShareToken}";
-    // Можно добавить генерацию QR-кода
-
-    return JsonSerializer.Serialize(new { action = "share_note", status = "success", shareUrl });
-  }
-
-  private string GetSharedNote(JsonElement json)
-  {
-    var token = json.GetProperty("token").GetString();
-
-    var note = _context.Notes.FirstOrDefault(n => n.ShareToken == token && !n.IsDeleted);
-
-    if (note == null)
-    {
-      return JsonSerializer.Serialize(new { action = "get_shared_note", status = "error", message = "Note not found" });
-    }
-
-    return JsonSerializer.Serialize(new
-    {
-      action = "get_shared_note",
-      status = "success",
-      note = new
-      {
-        title = note.Title,
-        text = note.Text,
-        date = note.Date
-      }
-    });
-  }
-
-  private string CreateNote(JsonElement json)
-  {
-    var user = GetUserByAuthToken(json);
-
-    if (user == null)
-    {
-      return JsonSerializer.Serialize(new { action = "create_note", status = "error", message = "Invalid auth token" });
-    }
-
-    var note = new Note
-    {
-      Title = json.GetProperty("title").GetString(),
-      Text = json.TryGetProperty("text", out JsonElement textElement) ? textElement.GetString() : null,
-      Date = DateTime.Now,
-      IsDeleted = false,
-      UserId = user.Id,
-      IsFolder = json.GetProperty("is_folder").GetBoolean(),
-      ParentId = json.TryGetProperty("parent_id", out JsonElement parentId) ? parentId.GetInt32() : (int?)null,
-      ShareToken = String.Empty
+      "create_note" => _notesService.CreateNote(json.RootElement),
+      "edit_note" => _notesService.EditNote(json.RootElement),
+      "delete_note" => _notesService.DeleteNote(json.RootElement),
+      "get_note_structure" => _notesService.GetNoteStructure(json.RootElement),
+      "share_note" => _notesService.ShareNote(json.RootElement, Request.Scheme, Request.Host.ToString()),
+      "get_shared_note" => _notesService.GetSharedNote(json.RootElement),
+      "register" => _usersService.RegisterUser(json.RootElement),
+      "login" => _usersService.LoginUser(json.RootElement),
+      _ => JsonSerializer.Serialize(new { action = "undefined", status = "error", message = "Unknown action" })
     };
-
-    _context.Notes.Add(note);
-    _context.SaveChanges();
-
-    return JsonSerializer.Serialize(new { action = "create_note", status = "success", id = note.Id });
-  }
-
-  private string EditNote(JsonElement json)
-  {
-    var user = GetUserByAuthToken(json);
-
-    if (user == null)
-    {
-      return JsonSerializer.Serialize(new { action = "edit_note", status = "error", message = "Invalid auth token" });
-    }
-
-    var id = json.GetProperty("id").GetInt32();
-    var note = _context.Notes.FirstOrDefault(n => n.Id == id && n.UserId == user.Id);
-
-    if (note == null)
-    {
-      return JsonSerializer.Serialize(new { action = "edit_note", status = "error", message = "Note not found" });
-    }
-
-    note.Title = json.GetProperty("title").GetString();
-    note.Text = json.GetProperty("text").GetString();
-
-    if (json.TryGetProperty("parent_id", out JsonElement parentId))
-    {
-      note.ParentId = parentId.GetInt32();
-    }
-
-    _context.SaveChanges();
-
-    return JsonSerializer.Serialize(new { action = "edit_note", status = "success" });
-  }
-
-  private string DeleteNote(JsonElement json)
-  {
-    var user = GetUserByAuthToken(json);
-
-    if (user == null)
-    {
-      return JsonSerializer.Serialize(new { action = "delete_note", status = "error", message = "Invalid auth token" });
-    }
-
-    var id = json.GetProperty("id").GetInt32();
-    var note = _context.Notes.FirstOrDefault(n => n.Id == id && n.UserId == user.Id);
-
-    if (note == null)
-    {
-      return JsonSerializer.Serialize(new { action = "delete_note", status = "error", message = "Note not found" });
-    }
-
-    MarkNoteAsDeleted(note);
-    _context.SaveChanges();
-
-    return JsonSerializer.Serialize(new { action = "delete_note", status = "success" });
-  }
-
-  private void MarkNoteAsDeleted(Note note)
-  {
-    note.IsDeleted = true;
-    var children = _context.Notes.Where(n => n.ParentId == note.Id);
-    foreach (var child in children)
-    {
-      MarkNoteAsDeleted(child);
-    }
-  }
-
-  private string GetNoteStructure(JsonElement json)
-  {
-    var user = GetUserByAuthToken(json);
-
-    if (user == null)
-    {
-      return JsonSerializer.Serialize(new { action = "get_note_structure", status = "error", message = "Invalid auth token" });
-    }
-
-    var notes = _context.Notes
-        .Where(n => n.UserId == user.Id && !n.IsDeleted)
-        .OrderBy(n => n.IsFolder)
-        .ThenBy(n => n.Title)
-        .ToList();
-
-    var structure = BuildNoteTree(notes, null);
-    return JsonSerializer.Serialize(new { action = "get_note_structure", status = "success", structure });
-  }
-
-  private List<object> BuildNoteTree(List<Note> allNotes, int? parentId)
-  {
-    var items = new List<object>();
-    var children = allNotes.Where(n => n.ParentId == parentId).ToList();
-
-    foreach (var child in children)
-    {
-      if (child.IsFolder)
-      {
-        items.Add(new
-        {
-          id = child.Id,
-          title = child.Title,
-          is_folder = true,
-          children = BuildNoteTree(allNotes, child.Id)
-        });
-      }
-      else
-      {
-        items.Add(new
-        {
-          id = child.Id,
-          title = child.Title,
-          is_folder = false,
-          text = child.Text
-        });
-      }
-    }
-
-    return items;
-  }
-
-  private string RegisterUser(JsonElement json)
-  {
-    var username = json.GetProperty("username").GetString();
-    var passwordHash = json.GetProperty("password_hash").GetString();
-
-    if (_context.Users.Any(u => u.Username == username))
-    {
-      return JsonSerializer.Serialize(new { action = "register", status = "error", message = "User already exists" });
-    }
-
-    var user = new User
-    {
-      Username = username,
-      PasswordHash = passwordHash,
-      AuthToken = Guid.NewGuid().ToString()
-    };
-
-    _context.Users.Add(user);
-    _context.SaveChanges();
-
-    return JsonSerializer.Serialize(new { action = "register", status = "success", auth_token = user.AuthToken });
-  }
-
-  private string LoginUser(JsonElement json)
-  {
-    var username = json.GetProperty("username").GetString();
-    var passwordHash = json.GetProperty("password_hash").GetString();
-
-    var user = _context.Users.SingleOrDefault(u => u.Username == username && u.PasswordHash == passwordHash);
-
-    if (user == null)
-    {
-      return JsonSerializer.Serialize(new { action = "login", status = "error", message = "Invalid credentials" });
-    }
-
-    return JsonSerializer.Serialize(new { action = "login", status = "success", auth_token = user.AuthToken });
   }
 }
