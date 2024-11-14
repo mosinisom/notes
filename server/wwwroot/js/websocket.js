@@ -42,6 +42,7 @@ function handleResponse(data) {
     case "get_note_structure":
       if (data.status === "success") {
         renderNotesTree(data.structure);
+        updateFolderSelect(data.structure);
       } else {
         alert("Ошибка получения заметок: " + data.message);
       }
@@ -121,6 +122,7 @@ document.getElementById("save-item-btn").onclick = function () {
   const isFolder = document.getElementById("modal").dataset.isFolder === "true";
   const isEditing = document.getElementById("modal").dataset.editing === "true";
   const itemId = document.getElementById("modal").dataset.itemId;
+  const parentId = document.getElementById("parent-folder").value;
 
   const message = {
     action: isEditing ? "edit_note" : "create_note",
@@ -130,8 +132,12 @@ document.getElementById("save-item-btn").onclick = function () {
     is_folder: isFolder
   };
 
+  if (parentId) {
+    message.parent_id = parseInt(parentId);
+  }
+
   if (isEditing) {
-    message.id = parseInt(itemId, 10);
+    message.id = parseInt(itemId);
   }
 
   sendMessage(message);
@@ -244,6 +250,12 @@ function openEditModal(item) {
     document.getElementById("item-text").style.display = "block";
   }
 
+  if (item.parent_id) {
+    document.getElementById("parent-folder").value = item.parent_id;
+  } else {
+    document.getElementById("parent-folder").value = "";
+  }
+  
   document.getElementById("save-item-btn").onclick = function () {
     const authToken = localStorage.getItem("auth_token");
     const title = document.getElementById("item-title").value;
@@ -257,4 +269,26 @@ function openEditModal(item) {
       text: text
     });
   };
+}
+
+function updateFolderSelect(structure, parentId = null) {
+  const select = document.getElementById('parent-folder');
+  select.innerHTML = '<option value="">Без папки</option>';
+
+  function addOptions(items, level = 0) {
+    items.forEach(item => {
+      if (item.is_folder && item.id !== parseInt(parentId)) {
+        const option = document.createElement('option');
+        option.value = item.id;
+        option.text = '  '.repeat(level) + item.title;
+        select.appendChild(option);
+
+        if (item.children) {
+          addOptions(item.children, level + 1);
+        }
+      }
+    });
+  }
+
+  addOptions(structure);
 }
