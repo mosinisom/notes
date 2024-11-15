@@ -14,3 +14,4 @@ public class Note
   public Note Parent { get; set; }
   public List<Note> Children { get; set; }
 }
+

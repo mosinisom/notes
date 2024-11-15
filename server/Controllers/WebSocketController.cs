@@ -50,19 +50,19 @@ public class WebSocketController : ControllerBase
 
   private string ProcessMessage(string message)
   {
-    var json = JsonDocument.Parse(message);
-    var action = json.RootElement.GetProperty("action").GetString();
+    var json = JsonDocument.Parse(message).RootElement;
+    var action = json.GetProperty("action").GetString();
 
     return action switch
     {
-      "create_note" => _notesService.CreateNote(json.RootElement),
-      "edit_note" => _notesService.EditNote(json.RootElement),
-      "delete_note" => _notesService.DeleteNote(json.RootElement),
-      "get_note_structure" => _notesService.GetNoteStructure(json.RootElement),
-      "share_note" => _notesService.ShareNote(json.RootElement, Request.Scheme, Request.Host.ToString()),
-      "get_shared_note" => _notesService.GetSharedNote(json.RootElement),
-      "register" => _usersService.RegisterUser(json.RootElement),
-      "login" => _usersService.LoginUser(json.RootElement),
+      "create_note" => _notesService.CreateNote(json),
+      "edit_note" => _notesService.EditNote(json),
+      "delete_note" => _notesService.DeleteNote(json),
+      "get_note_structure" => _notesService.GetNoteStructure(json),
+      "share_note" => _notesService.ShareNote(json, Request.Scheme, Request.Host.ToString()),
+      "get_shared_note" => _notesService.GetSharedNote(json),
+      "register" => _usersService.RegisterUser(json),
+      "login" => _usersService.LoginUser(json),
       _ => JsonSerializer.Serialize(new { action = "undefined", status = "error", message = "Unknown action" })
     };
   }
