@@ -260,13 +260,15 @@ function openEditModal(item) {
     const authToken = localStorage.getItem("auth_token");
     const title = document.getElementById("item-title").value;
     const text = document.getElementById("item-text").value;
+    const parentId = document.getElementById("parent-folder").value; 
 
     sendMessage({
       action: "edit_note",
       auth_token: authToken,
       id: item.id,
       title: title,
-      text: text
+      text: text,
+      parent_id: parentId ? parseInt(parentId) : null 
     });
   };
 }

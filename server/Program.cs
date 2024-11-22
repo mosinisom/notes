@@ -18,6 +18,13 @@ app.MapGet("/shared/{token}", async context =>
   context.Response.ContentType = "text/html";
   await context.Response.SendFileAsync(path);
 });
-app.MapGet("/", () => "Hello World!");
+
+app.MapGet("/", async context =>
+{
+  var path = Path.Combine(app.Environment.WebRootPath, "index.html");
+  context.Response.ContentType = "text/html";
+  await context.Response.SendFileAsync(path);
+});
+
 app.MapControllers();
 app.Run();

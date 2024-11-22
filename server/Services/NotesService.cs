@@ -41,31 +41,32 @@ public class NotesService
   public string EditNote(JsonElement json)
   {
     var user = _usersService.GetUserByAuthToken(json.GetProperty("auth_token").GetString());
-
     if (user == null)
       return JsonSerializer.Serialize(new { action = "edit_note", status = "error", message = "Invalid auth token" });
 
     var id = json.GetProperty("id").GetInt32();
     var note = _context.Notes.FirstOrDefault(n => n.Id == id && n.UserId == user.Id);
-
     if (note == null)
       return JsonSerializer.Serialize(new { action = "edit_note", status = "error", message = "Note not found" });
 
     note.Title = json.GetProperty("title").GetString();
     note.Text = json.GetProperty("text").GetString();
 
-    if (json.TryGetProperty("parent_id", out JsonElement parentId))
-      note.ParentId = parentId.GetInt32();
+    if (json.TryGetProperty("parent_id", out JsonElement parentIdElement))
+    {
+      note.ParentId = parentIdElement.ValueKind == JsonValueKind.Null ?
+          null :
+          parentIdElement.GetInt32();
+    }
 
     _context.SaveChanges();
-
     return JsonSerializer.Serialize(new { action = "edit_note", status = "success" });
   }
 
   public string DeleteNote(JsonElement json)
   {
     var user = _usersService.GetUserByAuthToken(json.GetProperty("auth_token").GetString());
-    
+
     if (user == null)
       return JsonSerializer.Serialize(new { action = "delete_note", status = "error", message = "Invalid auth token" });
 
