@@ -6,11 +6,13 @@ public class NotesService
 {
   private readonly ApplicationDbContext _context;
   private readonly UsersService _usersService;
+  private readonly CipherService _cipherService;
 
   public NotesService(ApplicationDbContext context, UsersService usersService)
   {
     _context = context;
     _usersService = usersService;
+    _cipherService = new CipherService();
   }
 
   public string CreateNote(JsonElement json)
@@ -22,8 +24,8 @@ public class NotesService
 
     var note = new Note
     {
-      Title = json.GetProperty("title").GetString(),
-      Text = json.TryGetProperty("text", out JsonElement textElement) ? textElement.GetString() : null,
+      Title = _cipherService.Encrypt(json.GetProperty("title").GetString(), user.Username),
+      Text = json.TryGetProperty("text", out JsonElement textElement) ? _cipherService.Encrypt(textElement.GetString(), user.Username) : null,
       Date = DateTime.Now,
       IsDeleted = false,
       UserId = user.Id,
@@ -49,8 +51,8 @@ public class NotesService
     if (note == null)
       return JsonSerializer.Serialize(new { action = "edit_note", status = "error", message = "Note not found" });
 
-    note.Title = json.GetProperty("title").GetString();
-    note.Text = json.GetProperty("text").GetString();
+    note.Title = _cipherService.Encrypt(json.GetProperty("title").GetString(), user.Username);
+    note.Text = _cipherService.Encrypt(json.GetProperty("text").GetString(), user.Username);
 
     if (json.TryGetProperty("parent_id", out JsonElement parentIdElement))
     {
@@ -105,7 +107,7 @@ public class NotesService
         .ThenBy(n => n.Title)
         .ToList();
 
-    var structure = BuildNoteTree(notes, null);
+    var structure = BuildNoteTree(notes, null, user.Username);
     return JsonSerializer.Serialize(new { action = "get_note_structure", status = "success", structure });
   }
 
@@ -137,7 +139,7 @@ public class NotesService
     return Convert.ToBase64String(Guid.NewGuid().ToByteArray()).Replace("/", "_").Replace("+", "-");
   }
 
-  private List<object> BuildNoteTree(List<Note> allNotes, int? parentId)
+  private List<object> BuildNoteTree(List<Note> allNotes, int? parentId, string username)
   {
     var items = new List<object>();
     var children = allNotes.Where(n => n.ParentId == parentId).ToList();
@@ -149,9 +151,9 @@ public class NotesService
         items.Add(new
         {
           id = child.Id,
-          title = child.Title,
+          title = _cipherService.Decrypt(child.Title, username),
           is_folder = true,
-          children = BuildNoteTree(allNotes, child.Id)
+          children = BuildNoteTree(allNotes, child.Id, username)
         });
       }
       else
@@ -159,9 +161,9 @@ public class NotesService
         items.Add(new
         {
           id = child.Id,
-          title = child.Title,
+          title = _cipherService.Decrypt(child.Title, username),
           is_folder = false,
-          text = child.Text
+          text = _cipherService.Decrypt(child.Text, username)
         });
       }
     }
@@ -181,18 +183,18 @@ public class NotesService
       return JsonSerializer.Serialize(new { action = "get_shared_note", status = "error", message = "Note not found" });
     }
 
+    var user = _context.Users.FirstOrDefault(u => u.Id == note.UserId);
+
     return JsonSerializer.Serialize(new
     {
       action = "get_shared_note",
       status = "success",
       note = new
       {
-        title = note.Title,
-        text = note.Text,
+        title = _cipherService.Decrypt(note.Title, user.Username),
+        text = _cipherService.Decrypt(note.Text, user.Username),
         date = note.Date
       }
     });
   }
 }
-
-

@@ -7,6 +7,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options => options.UseSqlite
 builder.Services.AddScoped<QRCodeGeneratorService>();
 builder.Services.AddScoped<NotesService>();
 builder.Services.AddScoped<UsersService>();
+builder.Services.AddScoped<CipherService>();
 
 var app = builder.Build();
 

@@ -19,6 +19,33 @@ public class CipherService
     return Convert.ToBase64String(key);
   }
 
+  private byte[] NormalizeKey(string key)
+  {
+    byte[] keyBytes = Encoding.UTF8.GetBytes(key);
+
+    byte[] normalizedKey = new byte[B];
+
+    if (keyBytes.Length >= B)
+    {
+      Array.Copy(keyBytes, normalizedKey, B);
+    }
+    else
+    {
+      for (int i = 0; i < B; i++)
+      {
+        normalizedKey[i] = keyBytes[i % keyBytes.Length];
+      }
+    }
+
+    return normalizedKey;
+  }
+
+  private string PrepareKey(string key)
+  {
+    byte[] normalizedKey = NormalizeKey(key);
+    return Convert.ToBase64String(normalizedKey);
+  }
+  
   private void KeyExpansion(byte[] key)
   {
     S = new uint[2 * (R + 1)];
@@ -50,7 +77,8 @@ public class CipherService
 
   public string Encrypt(string text, string key)
   {
-    byte[] keyBytes = Convert.FromBase64String(key);
+    string base64Key = PrepareKey(key);
+    byte[] keyBytes = Convert.FromBase64String(base64Key);
     KeyExpansion(keyBytes);
 
     byte[] textBytes = Encoding.UTF8.GetBytes(text);
@@ -79,7 +107,8 @@ public class CipherService
 
   public string Decrypt(string text, string key)
   {
-    byte[] keyBytes = Convert.FromBase64String(key);
+    string base64Key = PrepareKey(key);
+    byte[] keyBytes = Convert.FromBase64String(base64Key);
     KeyExpansion(keyBytes);
 
     byte[] textBytes = Convert.FromBase64String(text);
